@@ -64,9 +64,19 @@ async def websocket_endpoint(websocket: WebSocket):
             # Convert bytes to numpy array
             audio_data = np.frombuffer(data, dtype=np.float32)
             
-            # Print debug info to see if we are receiving audio
-            if np.random.random() < 0.05:  # Only print occasionally to avoid spam
-                print(f"Received audio chunk: {len(audio_data)} samples, max amplitude: {np.max(np.abs(audio_data)):.4f}")
+            max_amplitude = np.max(np.abs(audio_data))
+            
+            # Silence detection: skip inference if audio is mostly silent
+            # Microphone noise is typically 0.005-0.015, speech is usually 0.05+
+            SILENCE_THRESHOLD = 0.04
+            if max_amplitude < SILENCE_THRESHOLD:
+                # Send zero blendshapes when silent
+                zero_shapes = {name: 0.0 for name in BLENDSHAPE_NAMES}
+                await websocket.send_json({"blendshapes": zero_shapes})
+                continue
+            
+            if np.random.random() < 0.1:
+                print(f"[Audio] {len(audio_data)} samples, max amplitude: {max_amplitude:.4f} -> running inference")
             
             # Reshape to [batch_size, num_samples] -> [1, num_samples]
             audio_input = audio_data.reshape(1, -1)

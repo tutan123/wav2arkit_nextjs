@@ -2,7 +2,7 @@
 
 import { useState, useRef, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
+import { OrbitControls, Environment, ContactShadows, Bounds, useBounds } from '@react-three/drei';
 import { Avatar } from '@/components/Avatar';
 import { useAudioWebSocket } from '@/hooks/useAudioWebSocket';
 import { Mic, MicOff, Upload, Play, Server, AlertCircle } from 'lucide-react';
@@ -94,10 +94,12 @@ export default function Home() {
               <directionalLight position={[10, 10, 10]} intensity={1} />
               <Environment preset="city" />
               <ContactShadows opacity={0.4} scale={10} blur={2} far={4} />
-              <Suspense fallback={null}>
-                <Avatar url={modelUrl} type={modelType!} blendshapes={blendshapes} />
-              </Suspense>
-              <OrbitControls target={[0, 0.5, 0]} />
+              <Bounds fit clip observe margin={1.2}>
+                <Suspense fallback={null}>
+                  <Avatar url={modelUrl} type={modelType!} blendshapes={blendshapes} />
+                </Suspense>
+              </Bounds>
+              <OrbitControls makeDefault />
             </Canvas>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
@@ -178,16 +180,18 @@ export default function Home() {
 
           {/* Debug Info */}
           <section className="mt-auto">
-            <h2 className="text-sm font-semibold mb-2 text-gray-400">Debug Info</h2>
+            <h2 className="text-sm font-semibold mb-2 text-gray-400">Debug Info (原始值)</h2>
             <div className="bg-gray-950 p-3 rounded-lg text-xs font-mono text-gray-500 h-32 overflow-y-auto">
               {Object.keys(blendshapes).length > 0 ? (
                 Object.entries(blendshapes)
-                  .filter(([_, val]) => val > 0.01) // Show active blendshapes (lowered threshold even more)
-                  .sort((a, b) => b[1] - a[1]) // Sort by value descending
+                  .filter(([_, val]) => val > 0.01)
+                  .sort((a, b) => b[1] - a[1])
                   .map(([name, val]) => (
-                    <div key={name} className="flex justify-between">
-                      <span>{name}:</span>
-                      <span className="text-green-400">{val.toFixed(3)}</span>
+                    <div key={name} className="flex justify-between gap-2">
+                      <span className="truncate">{name}:</span>
+                      <span className={val > 0.3 ? 'text-yellow-400' : 'text-green-400'}>
+                        {val.toFixed(3)}
+                      </span>
                     </div>
                   ))
               ) : (

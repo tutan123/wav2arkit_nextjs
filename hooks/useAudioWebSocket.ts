@@ -118,7 +118,8 @@ export function useAudioWebSocket(url: string): UseAudioWebSocketReturn {
         
         const totalSamples = accumulatorRef.current.reduce((sum, chunk) => sum + chunk.length, 0);
         
-        if (totalSamples >= 8192) {
+        // 2048 samples at 16kHz = 128ms latency (good balance of latency vs quality)
+        if (totalSamples >= 2048) {
           // Merge all accumulated chunks into one buffer
           const merged = new Float32Array(totalSamples);
           let offset = 0;

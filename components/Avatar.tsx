@@ -9,6 +9,12 @@ interface AvatarProps {
   blendshapes: Record<string, number>;
 }
 
+// 放大系数：1.0 = 不放大，直接使用模型原始输出值
+const BLENDSHAPE_AMPLIFY = 1.0;
+
+// 已打印过形态键的 Mesh 集合（避免每帧刷屏）
+const loggedMeshes = new Set<string>();
+
 // 提取公共的 Blendshape 更新逻辑
 function useBlendshapes(scene: THREE.Group | THREE.Object3D | null, blendshapes: Record<string, number>) {
   useFrame(() => {
@@ -22,21 +28,34 @@ function useBlendshapes(scene: THREE.Group | THREE.Object3D | null, blendshapes:
         const influences = mesh.morphTargetInfluences;
         
         if (dict && influences) {
+          // 每个 Mesh 只打印一次形态键名称
+          const meshId = mesh.uuid;
+          if (!loggedMeshes.has(meshId)) {
+            loggedMeshes.add(meshId);
+            const names = Object.keys(dict);
+            console.log(`[Avatar] Mesh "${mesh.name}" has ${names.length} morph targets:`, names);
+          }
+          
           // 根据接收到的数据更新每个 blendshape
-          for (const [name, value] of Object.entries(blendshapes)) {
-            // 尝试直接匹配，或者匹配忽略大小写/前缀的名称
+          for (const [name, rawValue] of Object.entries(blendshapes)) {
+            // 放大值并截断到 [0, 1]
+            const value = Math.min(rawValue * BLENDSHAPE_AMPLIFY, 1.0);
+            
+            // 尝试直接匹配
             let index = dict[name];
             
-            // 如果直接匹配失败，尝试一些常见的变体
+            // 如果直接匹配失败，尝试首字母大写
             if (index === undefined) {
-              // 尝试首字母大写
-              const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
-              index = dict[capitalizedName];
+              const capitalized = name.charAt(0).toUpperCase() + name.slice(1);
+              index = dict[capitalized];
             }
             
             if (index === undefined) {
-              // 尝试查找包含该名称的键 (比如 "blendShape1.jawOpen")
-              const key = Object.keys(dict).find(k => k.toLowerCase().includes(name.toLowerCase()));
+              // 尝试模糊匹配（处理带前缀的名称，如 "blendShape1.jawOpen"）
+              const key = Object.keys(dict).find(k => 
+                k.toLowerCase().endsWith(name.toLowerCase()) || 
+                k.toLowerCase().includes('.' + name.toLowerCase())
+              );
               if (key) index = dict[key];
             }
             
