@@ -1,5 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+/** 将音频重采样到 16kHz（模型要求） */
+function resampleTo16k(input: Float32Array, inputSampleRate: number): Float32Array {
+  if (inputSampleRate === 16000) return input;
+  const outputLength = Math.floor(input.length * 16000 / inputSampleRate);
+  const result = new Float32Array(outputLength);
+  for (let i = 0; i < outputLength; i++) {
+    const srcIdx = i * inputSampleRate / 16000;
+    const j = Math.floor(srcIdx);
+    const frac = srcIdx - j;
+    result[i] = (1 - frac) * (input[j] ?? 0) + frac * (input[Math.min(j + 1, input.length - 1)] ?? 0);
+  }
+  return result;
+}
+
 interface UseAudioWebSocketReturn {
   isConnected: boolean;
   isRecording: boolean;
@@ -38,6 +52,14 @@ export function useAudioWebSocket(url: string): UseAudioWebSocketReturn {
           const data = JSON.parse(event.data);
           if (data.blendshapes) {
             setBlendshapes(data.blendshapes);
+            // Debug: 每 30 次打印一次非零 blendshape 到控制台
+            if (Math.random() < 0.033) {
+              const active = Object.entries(data.blendshapes)
+                .filter(([, v]) => v > 0.02)
+                .sort((a, b) => (b[1] as number) - (a[1] as number))
+                .slice(0, 15);
+              console.log('[Debug] Blendshapes 输出:', Object.fromEntries(active));
+            }
           }
           if (data.error) {
             console.error('[WS] Backend error:', data.error);
@@ -93,7 +115,12 @@ export function useAudioWebSocket(url: string): UseAudioWebSocketReturn {
         await audioContext.resume();
       }
       
-      console.log(`[Audio] AudioContext sample rate: ${audioContext.sampleRate}Hz`);
+      const actualSampleRate = audioContext.sampleRate;
+      if (actualSampleRate !== 16000) {
+        console.warn(`[Audio] ⚠️ 采样率 ${actualSampleRate}Hz ≠ 16kHz，将重采样！`);
+      } else {
+        console.log(`[Audio] ✓ 采样率 16kHz (正确)`);
+      }
       
       // Load the AudioWorklet processor
       await audioContext.audioWorklet.addModule('/audio-processor.js');
@@ -120,8 +147,8 @@ export function useAudioWebSocket(url: string): UseAudioWebSocketReturn {
         
         const totalSamples = accumulatorRef.current.reduce((sum, chunk) => sum + chunk.length, 0);
         
-        // 2048 samples at 16kHz = 128ms latency (good balance of latency vs quality)
-        if (totalSamples >= 2048) {
+        // 4096 samples at 16kHz = 256ms，给模型更多音素上下文，口型更准确
+        if (totalSamples >= 4096) {
           // Merge all accumulated chunks into one buffer
           const merged = new Float32Array(totalSamples);
           let offset = 0;
@@ -146,15 +173,19 @@ export function useAudioWebSocket(url: string): UseAudioWebSocketReturn {
           }
 
           if (maxAmp < FRONTEND_SILENCE_THRESHOLD) {
-            // Silent: tell Avatar to ease back to neutral via a special flag
             setIsSilent(true);
             return;
           }
           
           setIsSilent(false);
-          
-          // Send as binary Float32
-          wsRef.current.send(merged.buffer);
+
+          // 模型要求 16kHz，若浏览器不是 16kHz 则需重采样
+          let toSend = merged;
+          const sampleRate = audioContextRef.current?.sampleRate ?? 16000;
+          if (sampleRate !== 16000) {
+            toSend = resampleTo16k(merged, sampleRate);
+          }
+          wsRef.current.send(toSend.buffer);
         }
       };
       

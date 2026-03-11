@@ -75,8 +75,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"blendshapes": zero_shapes})
                 continue
             
-            if np.random.random() < 0.1:
-                print(f"[Audio] {len(audio_data)} samples, max amplitude: {max_amplitude:.4f} -> running inference")
+            if np.random.random() < 0.05:
+                print(f"[Backend] 收到 {len(audio_data)} samples, amp={max_amplitude:.4f}")
             
             # Reshape to [batch_size, num_samples] -> [1, num_samples]
             audio_input = audio_data.reshape(1, -1)
@@ -93,13 +93,21 @@ async def websocket_endpoint(websocket: WebSocket):
                 # We take the first frame (or average them if multiple)
                 # If audio chunk is small (e.g., 1/30s = ~533 samples), it might produce 1 frame
                 if blendshapes.shape[1] > 0:
-                    # Get the last frame's blendshapes for real-time responsiveness
-                    current_blendshapes = blendshapes[0, -1, :].tolist()
+                    # 对最后 2 帧取平均，使口型更平滑、减少抖动
+                    n_frames = blendshapes.shape[1]
+                    n_avg = min(2, n_frames)
+                    current_blendshapes = np.mean(blendshapes[0, -n_avg:, :], axis=0).tolist()
                     
                     # Map to dictionary
                     result = {
                         name: float(val) for name, val in zip(BLENDSHAPE_NAMES, current_blendshapes)
                     }
+                    
+                    # Debug: 每隔几次打印非零 blendshape
+                    if np.random.random() < 0.08:
+                        active = [(n, round(v, 3)) for n, v in result.items() if v > 0.02]
+                        active.sort(key=lambda x: -x[1])
+                        print(f"[Backend Debug] 输出 top10: {active[:10]}")
                     
                     await websocket.send_json({"blendshapes": result})
             except Exception as e:

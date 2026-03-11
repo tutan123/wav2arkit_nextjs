@@ -10,8 +10,8 @@ interface AvatarProps {
   isSilent: boolean;
 }
 
-// 放大系数：2.0 让动作更明显但不夸张，可按需调整
-const BLENDSHAPE_AMPLIFY = 2.0;
+// 放大系数：1.5，过大会让口型看起来失真
+const BLENDSHAPE_AMPLIFY = 1.5;
 
 // 已打印过形态键的 Mesh 集合（避免每帧刷屏）
 const loggedMeshes = new Set<string>();
@@ -64,7 +64,7 @@ function useBlendshapes(scene: THREE.Group | THREE.Object3D | null, blendshapes:
             }
             
             if (index !== undefined) {
-              influences[index] = THREE.MathUtils.lerp(influences[index], value, 0.4);
+              influences[index] = THREE.MathUtils.lerp(influences[index], value, 0.55);
             }
           }
         }
