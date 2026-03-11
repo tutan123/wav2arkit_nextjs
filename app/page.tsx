@@ -17,7 +17,8 @@ export default function Home() {
   const { 
     isConnected, 
     isRecording, 
-    blendshapes, 
+    blendshapes,
+    isSilent,
     startRecording, 
     stopRecording,
     error: wsError 
@@ -96,7 +97,7 @@ export default function Home() {
               <ContactShadows opacity={0.4} scale={10} blur={2} far={4} />
               <Bounds fit clip observe margin={1.2}>
                 <Suspense fallback={null}>
-                  <Avatar url={modelUrl} type={modelType!} blendshapes={blendshapes} />
+                  <Avatar url={modelUrl} type={modelType!} blendshapes={blendshapes} isSilent={isSilent} />
                 </Suspense>
               </Bounds>
               <OrbitControls makeDefault />

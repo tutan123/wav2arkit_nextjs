@@ -4,6 +4,7 @@ interface UseAudioWebSocketReturn {
   isConnected: boolean;
   isRecording: boolean;
   blendshapes: Record<string, number>;
+  isSilent: boolean;
   startRecording: () => void;
   stopRecording: () => void;
   error: string | null;
@@ -13,6 +14,7 @@ export function useAudioWebSocket(url: string): UseAudioWebSocketReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [blendshapes, setBlendshapes] = useState<Record<string, number>>({});
+  const [isSilent, setIsSilent] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const wsRef = useRef<WebSocket | null>(null);
@@ -129,11 +131,27 @@ export function useAudioWebSocket(url: string): UseAudioWebSocketReturn {
           }
           accumulatorRef.current = [];
           
-          // Log occasionally
-          if (Math.random() < 0.1) {
-            const maxAmp = Math.max(...Array.from(merged).map(Math.abs));
-            console.log(`[Audio] Sending ${merged.length} samples, max amplitude: ${maxAmp.toFixed(4)}`);
+          // Frontend silence gate: do NOT send if below threshold
+          // This prevents unnecessary WebSocket traffic and backend inference on silence
+          // Frontend silence gate: lower threshold to be safe with quiet microphones
+          const FRONTEND_SILENCE_THRESHOLD = 0.015;
+          let maxAmp = 0;
+          for (let i = 0; i < merged.length; i++) {
+            const abs = Math.abs(merged[i]);
+            if (abs > maxAmp) maxAmp = abs;
           }
+
+          if (Math.random() < 0.2) {
+            console.log(`[Audio] amp=${maxAmp.toFixed(4)} ${maxAmp >= FRONTEND_SILENCE_THRESHOLD ? '→ sending' : '→ silent, skip'}`);
+          }
+
+          if (maxAmp < FRONTEND_SILENCE_THRESHOLD) {
+            // Silent: tell Avatar to ease back to neutral via a special flag
+            setIsSilent(true);
+            return;
+          }
+          
+          setIsSilent(false);
           
           // Send as binary Float32
           wsRef.current.send(merged.buffer);
@@ -188,6 +206,7 @@ export function useAudioWebSocket(url: string): UseAudioWebSocketReturn {
     isConnected,
     isRecording,
     blendshapes,
+    isSilent,
     startRecording,
     stopRecording,
     error
