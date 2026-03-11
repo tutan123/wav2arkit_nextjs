@@ -64,6 +64,10 @@ async def websocket_endpoint(websocket: WebSocket):
             # Convert bytes to numpy array
             audio_data = np.frombuffer(data, dtype=np.float32)
             
+            # Print debug info to see if we are receiving audio
+            if np.random.random() < 0.05:  # Only print occasionally to avoid spam
+                print(f"Received audio chunk: {len(audio_data)} samples, max amplitude: {np.max(np.abs(audio_data)):.4f}")
+            
             # Reshape to [batch_size, num_samples] -> [1, num_samples]
             audio_input = audio_data.reshape(1, -1)
             
